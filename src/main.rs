@@ -8,19 +8,24 @@ fn main() {
 pub trait Word:
 Clone
 + Copy
++ PartialEq
 + std::ops::AddAssign
 + std::ops::SubAssign
 + std::ops::Add<Output=Self>
 + std::ops::Sub<Output=Self>
 + std::ops::BitXor<Output=Self>
++ std::ops::BitOr<Output=Self>
++ std::ops::BitAnd<Output=Self>
 + std::ops::Shl<Output=Self>
 + std::ops::Shr<Output=Self> {
     const ZERO: Self;
+    const ONE: Self;
     const BYTES: usize;
     const P: Self;
     const Q: Self;
 
     fn from_u8(byte: u8) -> Self;
+    fn from_usize(byte: usize) -> Self;
 }
 // Encryption
 // A = A + S[0]
@@ -29,6 +34,22 @@ Clone
 //     A = (A xor B)<<B + S[2*i]
 //     B = (B xor A)<<A + S[2*i+1]
 
+impl Word for u8 {
+    const ZERO: u8 = 0;
+    const ONE: u8 = 1;
+    const BYTES: usize = 1;
+    const P: u8 = 0;
+    const Q: u8 = 0;
+
+    fn from_u8(byte: u8) -> u8 {
+        byte
+    }
+
+    fn from_usize(word: usize) -> Self {
+        word as u8
+    }
+
+}
 pub fn encrypt<W: Word>(pt: [W; 2], key: Vec<u8>, rounds: usize) -> [W; 2] {
     let t = 2 * rounds + 1;
     let s = vec![W::ZERO; t];
@@ -105,45 +126,81 @@ pub fn expand_key<W: Word>(key: Vec<u8>, rounds: usize) -> Vec<W> {
         j = (j + i) % c;
     }
     key_s
+}
 
+fn rsl<W: Word>(operand: W, shift: W) -> W {
+    let bits: W = W::from_usize(W::BYTES*8);
+    let bits_not_rolled = (bits - W::ONE) & shift;
+    if bits_not_rolled == W::ZERO || bits_not_rolled == bits {
+        operand
+    } else {
+        (operand << bits_not_rolled) | (operand >> (bits - bits_not_rolled))
+    }
+}
+
+fn rsr<W: Word>(operand: W, shift: W) -> W {
+    let bits: W = W::from_usize(W::BYTES*8);
+    let bits_not_rolled = (bits - W::ONE) & shift;
+    if bits_not_rolled == W::ZERO || bits_not_rolled == bits {
+        operand
+    } else {
+        (operand >> bits_not_rolled) | (operand << (bits - bits_not_rolled))
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
-    fn test_rotate_left_shift() {
-        let a: u8 = 0x77; // 0111 0111
+    fn test_rotate_shift_left() {
+        let a: u8 = 0x75; // 0111 0101
         println!("a = {:2x?}", a);
-        
-        assert_eq!(rsl(a,1), 0xEE); // 1110 1110
-        assert!(rsl(a,2) == 0xDD); // 1101 1101
-        assert!(rsl(a,3) == 0xBB); // 1011 1011
+        println!("a rsl 1 = {:2x?}", rsl(a,1u8)); // 1110 1010
+        println!("a rsl 2 = {:2x?}", rsl(a,2u8)); // 1101 0101
+        println!("a rsl 3 = {:2x?}", rsl(a,3u8)); // 1010 1011
+        println!("a rsl 5 = {:2x?}", rsl(a,5u8)); // 1010 1110
+
+        assert_eq!(rsl(a,1u8), 0xEA); // 1110 1010
+        assert_eq!(rsl(a,2u8), 0xD5); // 1101 0101
+        assert_eq!(rsl(a,3u8), 0xAB); // 1010 1011
+        assert_eq!(rsl(a, 4u8), 0x57); // 0101 0111
+        assert_eq!(rsl(a, 5u8), 0xAE); // 1010 1110
+        assert_eq!(rsl(a, 8u8), a); // 0111 0101
+        assert_eq!(rsl(a, 9u8), rsl(a, 1u8)); // 1110 1010
     }
 
-    fn rsl(operand: u8, shift: i32) -> u8 {
-        operand << shift | operand >> (8 - shift)
+    #[test]
+    fn test_rotate_shift_right() {
+        let a: u8 = 0xBB; // 1011 1011
+        println!("a = {:2x?}", a);
+        println!("a rsr 1 = {:2x?}", rsr(a,1u8));
+        println!("a rsr 2 = {:2x?}", rsr(a,2u8));
+        println!("a rsr 3 = {:2x?}", rsr(a,3u8));
+
+        assert_eq!(rsr(a,1u8), 0xDD); // 1101 1101
+        assert_eq!(rsr(a,2u8), 0xEE);  // 1110 1110
+        assert_eq!(rsr(a,3u8), 0x77);  // 0111 0111
+        assert_eq!(rsr(a, 8u8), a);
+        assert_eq!(rsr(a, 9u8), rsr(a, 1u8));
     }
 
     #[test]
     fn test_encrypt_decrypt() {
-        /*
-        let pt : [dyn Word; 2] = [5, 44];
+        let pt : [u8; 2] = [5, 44];
         let rounds = 10;
         let key = vec![0; 16];
-        let ct = encrypt(pt, key, rounds);
+        let ct = encrypt(pt, key.clone(), rounds);
         let pt2 = decrypt(ct, key, rounds);
         assert_eq!(pt, pt2);
-         */
     }
 
     #[test]
     fn test_expand_key() {
-        /*
-        let key = vec![0; 16];
+        let key: Vec<u8> = vec![0; 16];
 
         let rounds = 10;
-        let s = expand_key(key, rounds);
+        let s : Vec<u8> = expand_key(key, rounds);
         assert_eq!(s.len(), 2 * rounds + 1);
-        */
     }
 }

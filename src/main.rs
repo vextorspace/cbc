@@ -8,6 +8,7 @@ fn main() {
 pub trait Word:
 Clone
 + Copy
++ std::fmt::Debug
 + PartialEq
 + std::ops::AddAssign
 + std::ops::SubAssign
@@ -155,12 +156,6 @@ mod tests {
     #[test]
     fn test_rotate_shift_left() {
         let a: u8 = 0x75; // 0111 0101
-        println!("a = {:2x?}", a);
-        println!("a rsl 1 = {:2x?}", rsl(a,1u8)); // 1110 1010
-        println!("a rsl 2 = {:2x?}", rsl(a,2u8)); // 1101 0101
-        println!("a rsl 3 = {:2x?}", rsl(a,3u8)); // 1010 1011
-        println!("a rsl 5 = {:2x?}", rsl(a,5u8)); // 1010 1110
-
         assert_eq!(rsl(a,1u8), 0xEA); // 1110 1010
         assert_eq!(rsl(a,2u8), 0xD5); // 1101 0101
         assert_eq!(rsl(a,3u8), 0xAB); // 1010 1011
@@ -168,15 +163,13 @@ mod tests {
         assert_eq!(rsl(a, 5u8), 0xAE); // 1010 1110
         assert_eq!(rsl(a, 8u8), a); // 0111 0101
         assert_eq!(rsl(a, 9u8), rsl(a, 1u8)); // 1110 1010
+        assert_eq!(rsl(a, 17u8), rsl(a, 1u8)); // 1110 1010
+
     }
 
     #[test]
     fn test_rotate_shift_right() {
         let a: u8 = 0xBB; // 1011 1011
-        println!("a = {:2x?}", a);
-        println!("a rsr 1 = {:2x?}", rsr(a,1u8));
-        println!("a rsr 2 = {:2x?}", rsr(a,2u8));
-        println!("a rsr 3 = {:2x?}", rsr(a,3u8));
 
         assert_eq!(rsr(a,1u8), 0xDD); // 1101 1101
         assert_eq!(rsr(a,2u8), 0xEE);  // 1110 1110

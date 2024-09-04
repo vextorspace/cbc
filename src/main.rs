@@ -1,4 +1,4 @@
-use crate::key::expand_key;
+use crate::key::Key;
 
 mod key;
 mod word;
@@ -72,15 +72,15 @@ impl Word for u32 {
     }
 }
 
-pub fn encrypt<W: Word>(pt: [W; 2], key: Vec<u8>, rounds: usize) -> [W; 2] {
-    let s = expand_key(key, rounds);
+pub fn encrypt<W: Word>(pt: [W; 2], key: Key) -> [W; 2] {
+    let s = key.expand_key();
 
     let [mut a, mut b] = pt;
 
     a = a.wrapping_add(&s[0]);
     b = b.wrapping_add(&s[1]);
 
-    for i in 1..rounds {
+    for i in 1..key.rounds {
         a = rsl(a ^ b, b).wrapping_add(&s[2 * i]);
         b = rsl(b ^ a, a).wrapping_add(&s[2 * i + 1]);
     }
@@ -95,13 +95,13 @@ pub fn encrypt<W: Word>(pt: [W; 2], key: Vec<u8>, rounds: usize) -> [W; 2] {
 // B = B - S[1]
 // A = A - S[0]
 
-pub fn decrypt<W: Word>(ct: [W; 2], key: Vec<u8>, rounds: usize) -> [W; 2] {
-    let t = 2 * rounds + 1;
-    let s = expand_key(key, rounds);
+pub fn decrypt<W: Word>(ct: [W; 2], key: Key) -> [W; 2] {
+    let t = 2 * key.rounds + 1;
+    let s = key.expand_key();
 
     let [mut a, mut b] = ct;
 
-    for i in (t-1)..0 {
+    for i in (1..key.rounds).rev() {
         b = rsr(b.wrapping_sub(&s[2 * i + 1]),a) ^ b;
         a = rsr(a.wrapping_sub(&s[2 * i]), b) ^ a;
 
@@ -138,11 +138,10 @@ mod tests {
     use super::*;
     #[test]
     fn test_rivest_1() {
-        let key = vec![0x00u8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let key = Key::new(vec![0; 16], 12);
         let pt = [0x00u32, 0x00];
-        let rounds = 12;
 
-        let ct = encrypt(pt, key, rounds);
+        let ct = encrypt(pt, key);
         println!("ct = {:2x?}", ct);
     }
 
@@ -174,10 +173,9 @@ mod tests {
     #[test]
     fn test_encrypt_decrypt() {
         let pt : [u8; 2] = [5, 44];
-        let rounds = 10;
-        let key = vec![0; 16];
-        let ct = encrypt(pt, key.clone(), rounds);
-        let pt2 = decrypt(ct, key, rounds);
+        let key = Key::new(vec![0; 16], 10);
+        let ct = encrypt(pt, key.clone());
+        let pt2 = decrypt(ct, key);
         assert_eq!(pt, pt2);
     }
 

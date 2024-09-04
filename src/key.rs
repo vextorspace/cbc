@@ -1,4 +1,5 @@
-use crate::{rsl, Word};
+use crate::Word;
+use crate::word::rsl;
 
 #[derive(Debug, Clone)]
 pub struct Key {

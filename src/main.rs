@@ -20,8 +20,8 @@ pub fn encrypt<W: Word>(pt: [W; 2], key: Key) -> [W; 2] {
     b = b.wrapping_add(&s[1]);
 
     for i in 1..key.rounds {
-        a = rsl(a ^ b, b).wrapping_add(&s[2 * i]);
-        b = rsl(b ^ a, a).wrapping_add(&s[2 * i + 1]);
+        a = word::rsl(a ^ b, b).wrapping_add(&s[2 * i]);
+        b = word::rsl(b ^ a, a).wrapping_add(&s[2 * i + 1]);
     }
 
     [a, b]
@@ -40,8 +40,8 @@ pub fn decrypt<W: Word>(ct: [W; 2], key: Key) -> [W; 2] {
     let [mut a, mut b] = ct;
 
     for i in (1..key.rounds).rev() {
-        b = rsr(b.wrapping_sub(&s[2 * i + 1]),a) ^ b;
-        a = rsr(a.wrapping_sub(&s[2 * i]), b) ^ a;
+        b = word::rsr(b.wrapping_sub(&s[2 * i + 1]), a) ^ b;
+        a = word::rsr(a.wrapping_sub(&s[2 * i]), b) ^ a;
 
     }
 
@@ -49,26 +49,6 @@ pub fn decrypt<W: Word>(ct: [W; 2], key: Key) -> [W; 2] {
     b = b.wrapping_sub(&s[1]);
 
     [a, b]
-}
-
-fn rsl<W: Word>(operand: W, shift: W) -> W {
-    let bits: W = W::from_usize(W::BYTES*8);
-    let bits_not_rolled = (bits - W::ONE) & shift;
-    if bits_not_rolled == W::ZERO || bits_not_rolled == bits {
-        operand
-    } else {
-        (operand << bits_not_rolled) | (operand >> (bits - bits_not_rolled))
-    }
-}
-
-fn rsr<W: Word>(operand: W, shift: W) -> W {
-    let bits: W = W::from_usize(W::BYTES*8);
-    let bits_not_rolled = (bits - W::ONE) & shift;
-    if bits_not_rolled == W::ZERO || bits_not_rolled == bits {
-        operand
-    } else {
-        (operand >> bits_not_rolled) | (operand << (bits - bits_not_rolled))
-    }
 }
 
 #[cfg(test)]
@@ -81,31 +61,6 @@ mod tests {
 
         let ct = encrypt(pt, key);
         println!("ct = {:2x?}", ct);
-    }
-
-    #[test]
-    fn test_rotate_shift_left() {
-        let a: u8 = 0x75; // 0111 0101
-        assert_eq!(rsl(a,1u8), 0xEA); // 1110 1010
-        assert_eq!(rsl(a,2u8), 0xD5); // 1101 0101
-        assert_eq!(rsl(a,3u8), 0xAB); // 1010 1011
-        assert_eq!(rsl(a, 4u8), 0x57); // 0101 0111
-        assert_eq!(rsl(a, 5u8), 0xAE); // 1010 1110
-        assert_eq!(rsl(a, 8u8), a); // 0111 0101
-        assert_eq!(rsl(a, 9u8), rsl(a, 1u8)); // 1110 1010
-        assert_eq!(rsl(a, 17u8), rsl(a, 1u8)); // 1110 1010
-
-    }
-
-    #[test]
-    fn test_rotate_shift_right() {
-        let a: u8 = 0xBB; // 1011 1011
-
-        assert_eq!(rsr(a,1u8), 0xDD); // 1101 1101
-        assert_eq!(rsr(a,2u8), 0xEE);  // 1110 1110
-        assert_eq!(rsr(a,3u8), 0x77);  // 0111 0111
-        assert_eq!(rsr(a, 8u8), a);
-        assert_eq!(rsr(a, 9u8), rsr(a, 1u8));
     }
 
     #[test]

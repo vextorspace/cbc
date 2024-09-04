@@ -1,3 +1,8 @@
+use crate::key::expand_key;
+
+mod key;
+mod word;
+
 fn main() {
     let a: u16 = 5;
     let b: u16 = 44;
@@ -8,6 +13,8 @@ fn main() {
 pub trait Word:
 Clone
 + Copy
++ num::traits::WrappingAdd
++ num::traits::WrappingSub
 + std::fmt::Debug
 + PartialEq
 + std::ops::AddAssign
@@ -39,30 +46,43 @@ impl Word for u8 {
     const ZERO: u8 = 0;
     const ONE: u8 = 1;
     const BYTES: usize = 1;
-    const P: u8 = 0;
-    const Q: u8 = 0;
+    const P: u8 = 0xB8u8;
+    const Q: u8 = 0x9Eu8;
 
     fn from_u8(byte: u8) -> u8 {
         byte
     }
-
     fn from_usize(word: usize) -> Self {
         word as u8
     }
-
 }
+
+impl Word for u32 {
+    const ZERO: u32 = 0;
+    const ONE: u32 = 1;
+    const BYTES: usize = 4;
+    const P: u32 = 0xB7E15163u32;
+    const Q: u32 = 0x9E3779B9u32;
+
+    fn from_u8(byte: u8) -> u32 {
+        byte as u32
+    }
+    fn from_usize(word: usize) -> Self {
+        word as u32
+    }
+}
+
 pub fn encrypt<W: Word>(pt: [W; 2], key: Vec<u8>, rounds: usize) -> [W; 2] {
-    let t = 2 * rounds + 1;
-    let s = vec![W::ZERO; t];
+    let s = expand_key(key, rounds);
 
     let [mut a, mut b] = pt;
 
-    a += s[0];
-    b += s[1];
+    a = a.wrapping_add(&s[0]);
+    b = b.wrapping_add(&s[1]);
 
-    for i in 1..t {
-        a = (a ^ b) << b + s[2 * i];
-        b = (b ^ a) << a + s[2 * i + 1];
+    for i in 1..rounds {
+        a = rsl(a ^ b, b).wrapping_add(&s[2 * i]);
+        b = rsl(b ^ a, a).wrapping_add(&s[2 * i + 1]);
     }
 
     [a, b]
@@ -77,56 +97,20 @@ pub fn encrypt<W: Word>(pt: [W; 2], key: Vec<u8>, rounds: usize) -> [W; 2] {
 
 pub fn decrypt<W: Word>(ct: [W; 2], key: Vec<u8>, rounds: usize) -> [W; 2] {
     let t = 2 * rounds + 1;
-    let s = vec![W::ZERO; t];
+    let s = expand_key(key, rounds);
 
     let [mut a, mut b] = ct;
 
     for i in (t-1)..0 {
-        b = ((b - s[2 * i + 1]) >> a) ^ b;
-        a = ((a - s[2 * i]) >> b) ^ a;
+        b = rsr(b.wrapping_sub(&s[2 * i + 1]),a) ^ b;
+        a = rsr(a.wrapping_sub(&s[2 * i]), b) ^ a;
 
     }
 
-    a -= s[0];
-    b -= s[1];
+    a = a.wrapping_sub(&s[0]);
+    b = b.wrapping_sub(&s[1]);
 
     [a, b]
-}
-
-pub fn expand_key<W: Word>(key: Vec<u8>, rounds: usize) -> Vec<W> {
-    let b = key.len();
-    let w = W::BYTES;
-    let temp = (8*b + (w - 1)) / w;
-    let c = std::cmp::max(1,temp);
-    let t = 2 * rounds + 1;
-
-    let mut key_l = vec![W::ZERO; c];
-    for i in (0..(b-1)).rev() {
-        let ix = i / w;
-        key_l[ix] = key_l[ix] << W::from_u8(8u8) + W::from_u8(key[i]);
-    }
-
-    let mut key_s = vec![W::ZERO; t];
-    key_s[0] = W::P;
-    for i in 1..t {
-        key_s[i] = key_s[i-1] + W::Q;
-    }
-
-    let mut i = 0;
-    let mut j = 0;
-    let mut a = W::ZERO;
-    let mut b = W::ZERO;
-
-    let iters = 3*std::cmp::max(c,t);
-    for _ in 0..iters {
-        key_s[i] = (key_s[i] + a + b) << W::from_u8(3u8);
-        a = key_s[i];
-        key_l[j] = (key_l[j] + a + b) << (a + b);
-        b = key_l[j];
-        i = (i + j) % t;
-        j = (j + i) % c;
-    }
-    key_s
 }
 
 fn rsl<W: Word>(operand: W, shift: W) -> W {
@@ -152,6 +136,15 @@ fn rsr<W: Word>(operand: W, shift: W) -> W {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn test_rivest_1() {
+        let key = vec![0x00u8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let pt = [0x00u32, 0x00];
+        let rounds = 12;
+
+        let ct = encrypt(pt, key, rounds);
+        println!("ct = {:2x?}", ct);
+    }
 
     #[test]
     fn test_rotate_shift_left() {
@@ -189,11 +182,8 @@ mod tests {
     }
 
     #[test]
-    fn test_expand_key() {
-        let key: Vec<u8> = vec![0; 16];
-
-        let rounds = 10;
-        let s : Vec<u8> = expand_key(key, rounds);
-        assert_eq!(s.len(), 2 * rounds + 1);
+    fn test_overflow() {
+        assert_eq!(255u8.wrapping_add(1u8), 0u8);
+        assert_eq!(0u8.wrapping_sub(1u8), 255u8);
     }
 }

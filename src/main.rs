@@ -11,7 +11,7 @@ fn main() {
 }
 
 
-pub fn encrypt<W: Word>(pt: [W; 2], key: Key) -> [W; 2] {
+pub fn encrypt<W: Word>(pt: [W; 2], key: &Key) -> [W; 2] {
     let s = key.expand_key();
 
     let [mut a, mut b] = pt;
@@ -19,7 +19,7 @@ pub fn encrypt<W: Word>(pt: [W; 2], key: Key) -> [W; 2] {
     a = a.wrapping_add(&s[0]);
     b = b.wrapping_add(&s[1]);
 
-    for i in 1..key.rounds {
+    for i in 1..= key.rounds {
         a = word::rsl(a ^ b, b).wrapping_add(&s[2 * i]);
         b = word::rsl(b ^ a, a).wrapping_add(&s[2 * i + 1]);
     }
@@ -34,19 +34,18 @@ pub fn encrypt<W: Word>(pt: [W; 2], key: Key) -> [W; 2] {
 // B = B - S[1]
 // A = A - S[0]
 
-pub fn decrypt<W: Word>(ct: [W; 2], key: Key) -> [W; 2] {
+pub fn decrypt<W: Word>(ct: [W; 2], key: &Key) -> [W; 2] {
     let s = key.expand_key();
 
     let [mut a, mut b] = ct;
 
-    for i in (1..key.rounds).rev() {
-        b = word::rsr(b.wrapping_sub(&s[2 * i + 1]), a) ^ b;
-        a = word::rsr(a.wrapping_sub(&s[2 * i]), b) ^ a;
-
+    for i in (1..=key.rounds).rev() {
+        b = word::rsr(b.wrapping_sub(&s[2 * i + 1]), a) ^ a;
+        a = word::rsr(a.wrapping_sub(&s[2 * i]), b) ^ b;
     }
 
-    a = a.wrapping_sub(&s[0]);
     b = b.wrapping_sub(&s[1]);
+    a = a.wrapping_sub(&s[0]);
 
     [a, b]
 }
@@ -59,16 +58,19 @@ mod tests {
         let key = Key::new(vec![0; 16], 12);
         let pt = [0x00u32, 0x00];
 
-        let ct = encrypt(pt, key);
+        let ct = encrypt(pt, &key);
+        let pt2 = decrypt(ct, &key);
+        assert_eq!(pt, pt2);
         println!("ct = {:2x?}", ct);
+        assert_eq!(ct, [0xEEDBA521u32, 0x6D8F4B15u32]);
     }
 
     #[test]
     fn test_encrypt_decrypt() {
         let pt : [u8; 2] = [5, 44];
         let key = Key::new(vec![0; 16], 10);
-        let ct = encrypt(pt, key.clone());
-        let pt2 = decrypt(ct, key);
+        let ct = encrypt(pt, &key);
+        let pt2 = decrypt(ct, &key);
         assert_eq!(pt, pt2);
     }
 
